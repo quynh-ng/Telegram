@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TelegramClient.Core;
 using TelegramClient.Entities.TL;
-using TelegramClient.Entities.TL.Contacts;
+using TelegramClient.Entities.TL.Messages;
 
 namespace Telegram_NEW
 {
@@ -23,6 +23,12 @@ namespace Telegram_NEW
         Task Auth_User();
         //обновление состояния
         void UpdateApplication();
+        //доступные сервисы приложения
+        Task Service();
+        //сервис для обмена сообщениями 
+        IMessageService MessServ { set; get; }
+        //сервис для работы с контактами
+        IContactService ContServ { set; get; }
     }
 
     //класс приложения
@@ -32,21 +38,24 @@ namespace Telegram_NEW
         public ITelegramClient Client { set; get; }
         //текущий пользователь
         public IUser I { set; get; }
-        //друг для обмена данными
-        public IUser Friend { set; get; }
+        //сервис для обмена сообщениями 
+        public IMessageService MessServ { set; get; }
+        //сервис для работы с контактами
+        public IContactService ContServ{ set; get; }
 
         //точка входа
         public async Task StartApplication()
         {
-            var S = new SimpleIoC();
-            //регистрация пользователя
-            S.Register<IUser, User>();
-            I = S.Resolve<IUser>();
+            //здесь происходит подключение к тестовому серверу
+            Client = ClientFactory.BuildClient(17349, "344583e45741c457fe1862106095a5eb", "149.154.167.40", 443);
 
-            Client = ClientFactory.BuildClient(196116, "f49bc1763398d6d1e935e30bf2cfe28f", "149.154.167.50", 443);
+            MessServ.Client = Client;
+            ContServ.Client = Client;
 
             await Client.ConnectAsync();
+
             bool flag = Client.IsUserAuthorized();
+
             if (flag == false)
             {
                 Console.WriteLine("\nПользователь не авторизирован!\n");
@@ -54,7 +63,7 @@ namespace Telegram_NEW
             }
             else
             {
-                Console.WriteLine("\nПользователь авторизирован\n");
+                Console.WriteLine("\nПользователь авторизирован");
                 //забираем из файла актуальную информацию: наши ID, имя, фамилия 
                 using (StreamReader sr = new StreamReader("inf.txt", Encoding.GetEncoding(1251)))
                 {
@@ -63,75 +72,13 @@ namespace Telegram_NEW
                     I.LastName = sr.ReadLine();
                 }
             }
+
             Console.Write("\nДля начала нажмите клавишу Enter\n");
+
             Console.ReadLine();
-           // PrintContact();
 
-            // Console.Write("\nВведите номер телефона, на который необходимо отправить сообщение (например, 79231315459): ");
-            //String NewPhone = Console.ReadLine();
-            String NewPhone= "";
-            String NewName = "";
-            Console.Write("\nВведите имя пользователя или номер телефона через 7: ");
-
-            String temp = Console.ReadLine();
-
-            if (temp[0] == '8' || temp[0] == '7')
-            {
-                 NewPhone = temp;
-            }
-            else
-            {
-                 NewName = temp;
-            }
-
-            Console.Write("\nВведите текст сообщения: ");
-            String NewText = Console.ReadLine();
-            //отправка сообщения по номеру телефона
-            var Contacts = await Client.GetContactsAsync();
-            TlUser Friend;
-            if (NewName != "")
-            { 
-                Friend = Contacts.Users.Lists.Where(x => x.GetType() == typeof(TlUser)).Cast<TlUser>().FirstOrDefault(x => x.FirstName == NewName);
-            }
-            else
-            {
-                Friend = Contacts.Users.Lists.Where(x => x.GetType() == typeof(TlUser)).Cast<TlUser>().FirstOrDefault(x => x.Phone == NewPhone);
-            }
-            if (Friend == null) Console.WriteLine("\nТакого пользователя не существует");
-            else await Client.SendMessageAsync(new TlInputPeerUser() { UserId = Friend.Id }, NewText);
-            var Dialogs = await Client.GetUserDialogsAsync();
-            //Where - фильтрация по заданному предикату
-            //var Friend = Contacts.Users.Lists.Where(x => x.GetType() == typeof(TlUser)).Cast<TlUser>().FirstOrDefault(x => x.Phone == NewPhone);
-            Console.ReadKey();
-            var req = new TlRequestDeleteContact();
-            req.Id = 
-        }
-
-        public async void PrintContact()
-        {
-            var Contacts = await Client.GetContactsAsync();
-            var one = Contacts.Users.Lists.OfType<TlUser>();
-            
-            foreach (var item in one)
-            {
-                //var type = item.Status.GetType();
-                if (item.Status.GetType() == null)
-                {
-                    Console.WriteLine(item.FirstName + " "+item.LastName + "\t\tну оооочень давно не был в сети");
-                }
-                if (item.Status.GetType() == typeof(TlUserStatusRecently))
-                {
-                    Console.WriteLine(item.FirstName + " " + item.LastName + "\t\tбыл в сети недавно");
-                }
-                if (item.Status.GetType() == typeof(TlUserStatusOffline))
-                {
-                    Console.WriteLine(item.FirstName + " " + item.LastName + "\t\tНе в сети");
-                }
-                if (item.Status.GetType() == typeof(TlUserStatusLastWeek))
-                {
-                    Console.WriteLine(item.FirstName + " " + item.LastName + "\t\tБыл в сети на прошлой недели");
-                }
-            }
+            //переходим к сервису доступных команд
+            await Service();
         }
 
         //авторизация пользователя
@@ -166,7 +113,34 @@ namespace Telegram_NEW
         //обновление состояния
         public void UpdateApplication()
         {
+            Console.Clear();
+            //ЗДЕСЬ БУДЕТ КУСОК КОДА ПО ОБНОВЛЕНИЮ ИНФОРМАЦИИ
+        }
 
+        //доступные сервисы приложения
+        public async Task Service()
+        {
+            Int32 CASE = 0;
+
+            //доступный сервис
+            while (CASE != 4)
+            {
+                UpdateApplication();
+                Console.WriteLine("1.Контакты");
+                Console.WriteLine("2.Сообщения({0})", 0);
+                Console.WriteLine("3.Чаты");
+                Console.WriteLine("4.Закрыть Telegram_New");
+                Console.Write("\nДействие: ");
+                CASE = Convert.ToInt32(Console.ReadLine());
+
+                switch(CASE)
+                {
+                    case 1: { await ContServ.Service();  break; }
+                    case 2: { await MessServ.Service();  break; }
+                    case 3: { break; }
+                    case 4: { break; }
+                }
+            }
         }
     }
 }
